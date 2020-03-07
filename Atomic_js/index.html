@@ -1,0 +1,1223 @@
+<!--------------------------------------------------------------------------------
+	
+    Aplikacja three.js - AtomicView
+                       Aplikacja front-endowa do wizualizacji atomow
+	
+	
+	P.Zielinski 2019.03
+
+Zmiany:
+wersja orginalna							P.Z. 03/25/2019
+
+-------------------------------------------------------------------------------->
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>Atomic View</title>
+		<style>
+			body { margin: 0; }
+		</style>
+			<link rel=stylesheet href="css/base.css"/>
+	</head>
+	<body>
+
+		<!-- Gerenal libs -->
+        <script src="js/three.js">//podstawowa biblioteka</script>
+		 <script src="js/WebGL.js">//biblioteka do wegl</script>
+		 <script src="js/three.min.js">//biblioteka pomocnicza do three.js</script>
+		 <script src="js/three.module.js">//z</script>
+        <script src="js/OrbitControls.js">//biblioteka do kontroli widoku</script>
+		<script src="js/OBJLoader.js">//wczytywanie pilku obj</script>
+		<script src="js/MTLLoader.js">//wczytanie dodatkowego pliku materialow do obj</script>
+		<script src='js/dat.gui.min.js'>//biblioteka do gui</script>
+			<script src='js/TransformControls.js'>//biblitoeka do wektorow xyz</script>		<script src="js/THREEx.FullScreen.js">//biblioteka do maksymalizacji sceny</script>
+		<script src="js/THREEx.WindowResize.js">//biblioteka do responsywanosci</script>
+		<!-- load fonts libs -->
+		<script src="fonts/gentilis_bold.typeface.js"></script>
+		<script src="fonts/gentilis_regular.typeface.js"></script>
+		<script src="fonts/optimer_bold.typeface.js"></script>
+		<script src="fonts/optimer_regular.typeface.js"></script>
+		<script src="fonts/helvetiker_bold.typeface.js"></script>
+		<script src="fonts/helvetiker_regular.typeface.js"></script>
+		<script src="fonts/droid_sans_regular.typeface.js"></script>
+		<script src="fonts/droid_sans_bold.typeface.js"></script>
+		<script src="fonts/droid_serif_regular.typeface.js"></script>
+		<script src="fonts/droid_serif_bold.typeface.js"></script>
+		<script src="js/jquery-1.9.1.js">//biblioteka do divow</script>
+		<script src="js/jquery-ui.js">//biblioteka do divow</script>
+
+
+
+		<script src='js/myliblary/ATOM.js'>//biblioteka do wczytywania atomow</script>
+		<script src='js/myliblary/StartPack.js'>//biblioteka do pustej sceny</script>
+		<script src='js/myliblary/MyGUI.js'>//biblioteka konfiguracji gui</script>
+		<script src='js/myliblary/Outline.js'>//biblioteka do obrysowania</script>
+		<script src="js/CinematicCamera.js">//Nie dziala kamera do postprodukcji</script>
+		
+
+
+		<link rel=stylesheet href="css/jquery-ui.css" />
+		<link rel=stylesheet href="css/info.css"/>
+		<link rel=stylesheet href="css/loadm.css"/>
+		<script src="js/info.js">//biblioteka do diva info</script>
+		<script src="js/changeValue.js">//biblioteka do diva changeValue</script>
+		<script src="js/loadBox.js">//biblioteka do diva przybornik</script>
+		
+
+		<div id="ThreeJS" style="position: absolute; left:0px; top:0px">
+		</div>
+		
+					<div id="infoButton"></div>
+					<div id="changeButton"></div>
+					<div id="loadButton"></div>
+			<div id="infoBox" title="Basic information">
+				
+			<input id="myInput" type="file"  onchange="loadfileatom();">
+				<p>The "1,2,3,4,5,6" keys are views</p>
+				<p>To return to controlling our main group we have to press the "0" button</p>
+				<p>The "m" key maximizes the view of the main window</p>
+				<p></p>
+				<p>Useful files:</p>
+				<a href="http://std2.phys.uni.lodz.pl/piotrzielinski/Atomic_js/in/Instruction.pdf">User manual EN</a>
+				<p></p>
+				<input type="button" value="Example_file.xyz" onClick="save_examle();">
+				
+				
+			</div>
+			<div id="changeBox" title="Group modification">
+			
+			</div>
+			<div id="loadBox" title="Material Toolbox" >
+
+				<div id="ThreeJS_M" style="left:0px; top:0px">
+				</div>
+				<div style="position: absolute; left:60%; top:0px">
+					<p>Load into active item:</p>
+					<input id="mInput" type="file"  onchange="loadfilematerial();">
+					<p>Save the active material to a file</p>
+					<input type="button" value="Save" onClick="save_file();">
+				</div>
+			</div>
+		<script>
+		
+		
+			/////////////////////////////
+			//Klasa przetrzymuje obiekt 3D Font
+			class GFont {
+				constructor(object, id) {
+				this.object = object;
+				this.id = id;
+				}
+			}
+			//sfera eksperymetalna
+			var geometry_exp = new THREE.SphereGeometry( 5, 32, 32 );
+			var material_exp = new THREE.MeshBasicMaterial( {color: 0xffff00} );
+			var sphere_exp = new THREE.Mesh( geometry_exp, material_exp );
+			
+			//sfera dla kontrol
+			var geometry_control = new THREE.SphereGeometry( 2, 32, 32 );
+			var material_control = new THREE.MeshBasicMaterial( {color: 0xffffff} );
+			var sphere_control = new THREE.Mesh( geometry_control, material_control );
+			sphere_control.visible = false;
+			//flaga do raycast dla zmiany polozenia osi
+			var flagRayCastAtom = false;
+
+			//flaga do legendy 
+			let legendFlag = false;
+			//flaga mowi nam czy dodalismy recznie swiatlo
+			let flag_light = false;
+			//grupa swiatel uzywana w wczytanej scenie 
+			let group_Light = new THREE.Group();
+			//parametry do dodawania stickow miedzy atomami
+			let stick_activ_group_1;
+			let stick_activ_group_2;
+			let putdistance_stick_1;
+			let putdistance_stick_2;
+			// when the mouse moves, call the given function
+			document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+			
+			document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		    //obsluga klawiatury
+            document.addEventListener("keydown", onDocumentKeyDown, false);
+			//Select obiektow
+			var orgin_ray_posx;
+				var orgin_ray_posy;
+					var orgin_ray_posz;
+			//group location
+			var group_ray_posx;
+				var group_ray_posy;
+					var group_ray_posz;
+			var raycaster;
+			var time = 12;
+			//zawartosc wczytanego pliku 
+			let file_value;
+			var mouse = new THREE.Vector2(), INTERSECTED;
+			///////////////////////////
+			//ZMIENNE GLOBALNE
+			var gui;
+			//kontener dla widoku (respunsynowsc)
+			var container;
+			//Lista przechowuje punkty spher
+			var list = [];
+			//Lista przechowuje id pierwiastkow
+			var list_id = ["All","None"];
+			//Lista przechowuje id pierwiastkow
+			var list_lights = ["None"];
+			//Lista przechowuje litery id pierwiastkow
+			var list_fob = [];
+			//Lista przechowuje obiekty klasy GFigure
+			var ref_list = [];
+			//Lista przechowuje poyzcje obiektow
+			var outline_list = [];
+			//Zmienna globalna przechowujaca id pierwiastka ktory nas interesuje
+			var id_check = "None";
+			//Typ koloru jaki chcemy zmienic
+			var mcolor_type;
+			//Zmienne przechowujace informacje odnosnie pliku
+			let elementname = "";
+			let elementnumber = "";
+			//Flaga do wlaczania i wylaczania obrysowania aktywnej grupy obiektow
+			let flag_outline = false;
+			//Flaga ktora sprawdza czy to pierwszy wczytany plikur
+			let flag_open = false;
+			//Grupa w ktorej znajduja sie obiekty obrysowania (BACKDRAW)
+			let group_outline = new THREE.Group();
+			//informacja o pustej scenie
+			var info;
+			//Obiekt do wyswietlania tekstu pierwiatkow
+			var meshText;
+			//Deklaracja sceny 
+			var scene = new THREE.Scene();
+			//globalna srednica
+			var radiusCylinderGlobal = 0.1;
+
+			var camera_percpective = new THREE.PerspectiveCamera( 25, window.innerWidth / window.innerHeight, 1, 1000 );
+			camera_percpective.position.set( 40, 40, 40 ); // all components equal
+			//scene.add(camera_percpective);
+
+			var aspect = window.innerWidth / window.innerHeight;
+			var d = 0.1;
+			var camera_ortho = new THREE.OrthographicCamera( - d * aspect, d * aspect, d, - d, 1, 1000 );
+			camera_ortho.position.set( 40, 40, 40 ); // all components equal
+			camera_ortho.lookAt( scene.position ); // or the origin
+			//scene.add(camera_ortho);
+
+
+			var cameraRig = new THREE.Group();
+			cameraRig.add( camera_percpective );
+			cameraRig.add( camera_ortho );
+
+			scene.add( cameraRig );
+
+			var camera_active = camera_ortho;
+			
+
+			var cameraa = new THREE.OrthographicCamera( - d * aspect, d * aspect, d, - d, 1, 1000 );
+			cameraa.position.set( 40, 40, 40 ); // all components equal
+			cameraa.lookAt( scene.position ); // or the origin
+			scene.add(cameraa);
+
+			
+			//zmienna zapamietujaca wartosci intensywnosci swiatla hemisferycznego
+			let value_inten_hemi;
+			var activ_light;
+			let flag_ray = false;
+			let flag_click = false;
+			var renderer = new THREE.WebGLRenderer();
+				// EVENTS
+				THREEx.WindowResize(renderer, camera_active);
+				THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+            renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.setClearColor(new THREE.Color(0x000000));
+				//renderer.autoClear = false;
+
+            ////////////////////////////
+            //Utworzenie kontrolera dzieki ktoremu mozna myszka zmieniac polozenie kamery na scenie
+            //
+			var Orbit = new THREE.OrbitControls( camera_ortho, renderer.domElement );
+			Orbit.update();
+			Orbit.enablePan = false;
+			
+			            ////////////////////////////
+            //Utworzenie kontrolera dzieki ktoremu mozna myszka zmieniac polozenie kamery na scenie
+            //
+			var Orbitp = new THREE.OrbitControls( camera_percpective, renderer.domElement );
+			Orbitp.update();
+			Orbitp.enablePan = false;
+
+			///////////////////////////////////////////////////////////
+			///kontrola osi
+			control = new THREE.TransformControls( camera_active, renderer.domElement );
+			control.addEventListener( 'change', renderScene );
+			control.addEventListener( 'dragging-changed', function ( event ) {
+			Orbit.enabled = ! event.value;
+			Orbitp.enabled = ! event.value;
+				} );
+
+			///////////////////////////////////////////////////////////
+			///kontrola osi dla swiatla
+			control_light = new THREE.TransformControls( camera_active, renderer.domElement );
+			control_light.addEventListener( 'change', renderScene );
+			control_light.addEventListener( 'dragging-changed', function ( event ) {
+			Orbit.enabled = ! event.value;
+			Orbitp.enabled = ! event.value;
+				 } );
+			console.log(camera_active);
+			////////////////////////////
+			//powiazanie renderera z <ThreeJS>
+			//
+				container = document.getElementById( 'ThreeJS' );
+				container.appendChild( renderer.domElement );
+				
+			//document.body.appendChild( renderer.domElement );
+
+
+			/////////////////////////
+			//powizanie render_material z <ThreeJS_M>
+						//Deklaracja sceny 
+				var scene_m = new THREE.Scene();
+				var camera_m = new THREE.OrthographicCamera( - d * aspect, d * aspect, d, - d, 1, 1000 );
+				camera_m.position.set( 40, 40, 40 ); // all components equal
+				var renderer_m = new THREE.WebGLRenderer();
+				// EVENTS
+				THREEx.WindowResize(renderer_m, camera_m);
+				renderer_m.setSize( window.innerWidth*0.2, window.innerHeight*0.2 );
+				renderer_m.setClearColor(new THREE.Color(0x000000));
+				container_material = document.getElementById( 'ThreeJS_M');
+				container_material.appendChild( renderer_m.domElement );
+				
+			
+					
+					var Geometry_material_sphere = new THREE.SphereGeometry(0.1,40,40);
+					var wire_Material = new THREE.MeshPhongMaterial( { color: 0xff8000 } );	
+					var lightbulb_m = new THREE.Mesh( Geometry_material_sphere, wire_Material );
+					lightbulb_m.position.set(0.01,0.1,0.0);
+					scene_m.add(lightbulb_m);
+					camera_m.lookAt( lightbulb_m.position ); // or the origin
+									
+					var light_m = new THREE.PointLight( 0xff0000, 1, 100 );
+					light_m.position.set(0.01,0.1,0.0);
+					scene_m.add( light_m );
+					// need to add an ambient light
+					//  for ambient colors to be visible
+					// make the ambient light darker so that
+					//  it doesn't overwhelm (like emmisive light)
+					var light2_m = new THREE.AmbientLight(0x333333); 
+					light2_m.position.set( light_m.position );
+					scene_m.add(light2_m);
+					var lightH_m = new THREE.HemisphereLight( 0xffffbb, 0x080820, 0.5 );		//dodajemy tez delikatne swiatlo hemisferyczne
+					scene_m.add( lightH_m );
+					
+					renderer_m.render(scene_m, camera_m);
+            ///////////////////////////////////////
+            //cubemap / skybox
+            //
+			var path = "textures/greenland/"; 
+            var format = '.jpg';
+			var urls = [ path + "px.jpg", path + "nx.jpg",
+					path + "py.jpg", path + "ny.jpg",
+					path + "pz.jpg", path + "nz.jpg"];
+					
+			//odbicia
+            var reflectionCube = new THREE.CubeTextureLoader().load( urls );
+            reflectionCube.format = THREE.RGBFormat;
+            //scene.background = reflectionCube;
+
+			//przezroczysto&#65533;ci
+			refractionCube = new THREE.CubeTextureLoader().load( urls );
+			refractionCube.mapping = THREE.CubeRefractionMapping;
+			refractionCube.format = THREE.RGBFormat;
+						
+			// textures Bronze
+			var textureLoader = new THREE.TextureLoader();
+			var normalMap = textureLoader.load( "textures/bronze/normal.jpg" );
+			var aoMapB = textureLoader.load( "textures/bronze/ao.jpg" );
+			var displacementMap = textureLoader.load( "textures/bronze/dis.jpg" );
+			var roughnessMap = textureLoader.load( "textures/bronze/dis.jpg" );
+			var metalnessMap = textureLoader.load( "textures/bronze/metallic.jpg" );
+			
+			// textures Aluminium	
+			var normalMapA = textureLoader.load( "textures/Aluminum/normal.jpg" );
+			var aoMapA = textureLoader.load( "textures/Aluminum/ao.jpg" );
+			var displacementMapA = textureLoader.load( "textures/Aluminum/dis.jpg" );
+			var roughnessMapA = textureLoader.load( "textures/Aluminum/dis.jpg" );
+			var metalnessMapA = textureLoader.load( "textures/Aluminum/metallic.jpg" );
+			
+			// textures Steel_cable
+			var normalMapCa = textureLoader.load( "textures/Steel_cabel/normal.jpg" );
+			var aoMapCa = textureLoader.load( "textures/Steel_cabel/ao.jpg" );
+			
+			// textures Copper
+			var normalMapC = textureLoader.load( "textures/Copper/normal.jpg" );
+			var aoMapC = textureLoader.load( "textures/Copper/ao.jpg" );
+			
+			//Swiatlo i modele dla pustej sceny Logo
+			var group = new THREE.Group();
+			var group_change = new THREE.Group();
+			var group_item = new THREE.Group();
+			var groupLight1 = new THREE.Group();
+			var groupLight2 = new THREE.Group();
+			var lightloader = StartPack;
+			group_change.add(sphere_control);
+			lightloader.loadbaseLight();
+			
+			
+			var onOffCubes = [];	
+			var onOffChangeLoc= [];	
+			function addlistelemets()
+			{
+			var div = document.createElement("DIV"); 	
+			div.setAttribute("id", "div_contener");
+			document.getElementById("changeBox").appendChild(div);
+			
+			var input = document.createElement("INPUT");
+			input.setAttribute("id", "number_");
+			input.setAttribute("value", "2");
+			
+			var button_s = document.createElement("button");
+			button_s.setAttribute("onclick", "changeFunction()");
+			
+			var node_s = document.createTextNode("Set");
+			button_s.appendChild(node_s);
+			
+			var button_w = document.createElement("button");
+			button_w.setAttribute("onclick", "deleteChange()");
+			
+			var node_w = document.createTextNode("Delete");
+			button_w.appendChild(node_w);
+			
+			/////////////////////////////////////////////////////////////
+			// var button_h = document.createElement("button");
+			// button_h.setAttribute("onclick", "deleteChange()");
+			
+			// var node_h = document.createTextNode("Ukryj/Pokaz nie polaczone");
+			// button_h.appendChild(node_h);
+			//////////////////////////////////////////////////////////////
+			
+			var option_1 = document.createElement("select");
+			var option_2 = document.createElement("select");
+			
+			var para = document.createElement("a");
+			var node = document.createTextNode("<--->");
+			para.appendChild(node);
+			
+			var para_2 = document.createElement("a");
+			var node_2 = document.createTextNode(" to");
+			para_2.appendChild(node_2);
+			
+			var para_1 = document.createElement("p");
+			var node_1 = document.createTextNode("Set your own distances between groups of elements");
+			para_1.appendChild(node_1);
+			
+			document.getElementById("div_contener").appendChild(para_1);
+			option_1.setAttribute("id", "changeSelect_one");
+			option_2.setAttribute("id", "changeSelect_two");
+			document.getElementById("div_contener").appendChild(option_1);
+			document.getElementById("div_contener").appendChild(option_2);
+			document.getElementById("div_contener").appendChild(para_2);			
+			document.getElementById("div_contener").appendChild(input);
+			document.getElementById("div_contener").appendChild(para);
+			document.getElementById("div_contener").appendChild(button_s);
+			document.getElementById("div_contener").appendChild(button_w);
+			//document.getElementById("div_contener").appendChild(button_h);
+				for(var i=2;i<list_id.length;i++)
+				{
+					if(list_id[i] != "Stick")
+					{
+						var x = document.createElement("OPTION");
+						var y = document.createElement("OPTION");
+						x.setAttribute("value", list_id[i]);
+						y.setAttribute("value", list_id[i]);
+						x.setAttribute("id", "option_"+i);
+						y.setAttribute("id", "option_"+i);
+						var t = document.createTextNode(list_id[i]);
+						var tt = document.createTextNode(list_id[i]);
+						x.appendChild(t);
+						y.appendChild(tt);
+						document.getElementById("changeSelect_one").appendChild(x);
+						document.getElementById("changeSelect_two").appendChild(y);
+					}
+				}
+				
+			}
+			
+			function removeElement() {
+				// Removes an element from the document
+				var element = document.getElementById("div_contener");
+				element.parentNode.removeChild(element);
+			}
+			function changeFunction()
+			{
+			var x = document.getElementById("changeSelect_one").value;
+			var y = document.getElementById("changeSelect_two").value;
+			var w = document.getElementById("number_").value;
+			//var w_0 = document.getElementById("number_0").value;
+			//console.log(x);
+			//console.log(y);
+			//console.log(w);
+			stick_activ_group_1 = x;
+			stick_activ_group_2 = y;
+			//putdistance_stick_1 = w_0;
+			putdistance_stick_2 = w;
+			addstick();
+						if(id_check == "All")
+					{
+			updateOutline();
+					}
+			}
+
+			function deleteChange()
+			{	
+			var x = document.getElementById("changeSelect_one").value;
+			var y = document.getElementById("changeSelect_two").value;
+			var w = document.getElementById("number_").value;
+			//var w_0 = document.getElementById("number_0").value;
+			//console.log(x);
+			//console.log(y);
+			//console.log(w);
+			stick_activ_group_1 = x;
+			stick_activ_group_2 = y;
+			//putdistance_stick_1 = w_0;
+			putdistance_stick_2 = w;
+			 deletestick();
+			}
+			//////////////////////////////////////////////////////////////////////////////////////////////
+		function reload_active_elements() {
+		for(var i = 0 ; i < ref_list.length;i++)
+		{					
+				if(id_check==ref_list[i].id.toString())
+				{
+				//console.log(lightbulb_m);
+				lightbulb_m.material = ref_list[i].object.material;
+				renderer_m.render(scene_m, camera_m);
+				i = ref_list.length - 1;
+				}	
+		}
+		}
+
+		function save_file()
+		{
+			//to jest z json'a na object
+			//JSON.parse('{ "name":"John", "age":30, "city":"New York"}'); 
+
+					var textFile = new Blob([JSON.stringify(lightbulb_m)], {
+				   type: 'text/plain'
+				});
+				invokeSaveAsDialog(textFile, 'TextFile.txt');
+		}
+		
+		function loadfilematerial() {
+		
+					var loader = new THREE.FileLoader();
+
+			
+				//load a text file and output the result to the console
+				loader.load(
+					// resource URL
+					"in/simple.txt",
+
+					// onLoad callback
+					function ( data ) {
+			//wczytywanie zawartosci pliku
+			////////////////////////////////////////////////////////////////
+			var fileToLoad = document.getElementById("mInput").files[0];////
+			var fileReader = new FileReader();							////
+			fileReader.onload = function(fileLoadedEvent){				////
+				var textFromFileLoaded = fileLoadedEvent.target.result; ////
+				file_value = fileLoadedEvent.target.result;				////
+				var x = fileLoadedEvent.target.result.toString();		////
+		   /////////////////////////////////////////////////////////////////
+				
+				//parsekowanie z jsona na object
+				//////////////////////////////////////////////////
+					var json = JSON.parse(x);					//
+					var objLoaderr = new THREE.ObjectLoader();   //
+					var object = objLoaderr.parse(json);			//
+																//
+					lightbulb_m.material = object.material;		//
+					renderer_m.render(scene_m, camera_m);		//
+				//////////////////////////////////////////////////
+				
+				for(var i = 0 ; i < ref_list.length;i++)
+					{					
+							if(id_check==ref_list[i].id.toString())
+							{
+							//console.log(lightbulb_m);
+							ref_list[i].object.material = object.material;
+							renderer.render(scene, camera_active);
+							
+							}	
+					}
+		
+				};
+				fileReader.readAsText(fileToLoad);
+				//console.log(fileReader.result);
+					},
+
+					// onProgress callback
+					function ( xhr ) {
+						//console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+					},
+
+					// onError callback
+					function ( err ) {
+						//console.error( 'An error happened' );
+					}
+				);
+				
+		//console.log(x);
+		}
+		function invokeSaveAsDialog(file, fileName) {
+			if (!file) {
+				throw 'Blob object is required.';
+			}
+
+			if (!file.type) {
+				try {
+					file.type = 'video/webm';
+				} catch (e) {}
+			}
+
+			var fileExtension = (file.type || 'video/webm').split('/')[1];
+
+			if (fileName && fileName.indexOf('.') !== -1) {
+				var splitted = fileName.split('.');
+				fileName = splitted[0];
+				fileExtension = splitted[1];
+			}
+
+			var fileFullName = (fileName || (Math.round(Math.random() * 9999999999) + 888888888)) + '.' + fileExtension;
+
+			if (typeof navigator.msSaveOrOpenBlob !== 'undefined') {
+				return navigator.msSaveOrOpenBlob(file, fileFullName);
+			} else if (typeof navigator.msSaveBlob !== 'undefined') {
+				return navigator.msSaveBlob(file, fileFullName);
+			}
+
+			var hyperlink = document.createElement('a');
+			hyperlink.href = URL.createObjectURL(file);
+			hyperlink.download = fileFullName;
+
+			hyperlink.style = 'display:none;opacity:0;color:transparent;';
+			(document.body || document.documentElement).appendChild(hyperlink);
+
+			if (typeof hyperlink.click === 'function') {
+				hyperlink.click();
+			} else {
+				hyperlink.target = '_blank';
+				hyperlink.dispatchEvent(new MouseEvent('click', {
+					view: window,
+					bubbles: true,
+					cancelable: true
+				}));
+			}
+
+			(window.URL || window.webkitURL).revokeObjectURL(hyperlink.href);
+		}
+
+		function loadfileatom(){
+		var filename = document.getElementById('myInput').files[0].name;
+		var path =document.getElementById('myInput');
+
+
+				//console.log(fileReader.result.toString());
+				
+						if(flag_open == false)
+						{
+							while(scene.children.length > 0){ 
+							scene.remove(scene.children[0]); 
+							}
+						}
+						else
+						{
+							control.attach( group_item );
+							control.position.copy( group_item.position );
+			            while(group_item.children.length > 0){ 
+						group_item.remove(group_item.children[0]); 
+						}
+						}
+						
+						if(flag_open == true)
+						{
+							//Zerowanie List i Gui
+							removeElement();
+							removeGui();
+							list = [];
+							list_id = ["All","None"];
+							ref_list = [];
+							outline_list = [];
+							flag_outline = false;
+						}
+						else
+						{
+							flag_open = true;
+						}
+						
+						//Ladownie obiektu do sceny 
+						
+						var loaderf = new THREE.FontLoader();
+							loaderf.load( 'fonts/helvetiker_regular.typeface.json', function ( font ) {
+							var textGeo = new THREE.TextGeometry( "C", {
+
+								font: font,
+
+								size: 0.5, height: 0.1, curveSegments: 3,
+
+								bevelThickness: 2,
+								bevelSize: 5,
+								bevelEnabled: false
+
+							} );
+
+							var textMaterial = new THREE.MeshPhongMaterial( { color: 0xffffff } );
+
+							meshText = new THREE.Mesh( textGeo, textMaterial );
+							meshText.position.set( 200 - (0.001 *window.innerWidth), 200 -(0.001 *window.innerWidth) , 200 );
+							// 0.1 *window.innerWidth- 2, 0.1 *window.innerHeight - 2
+							meshText.lookAt( cameraa.position );
+							scene.add( meshText );
+							} );
+
+						scene.add( sphere_exp);
+						sphere_exp.position.x = 200;
+						sphere_exp.position.y = 200;
+						sphere_exp.position.z = 200;
+						
+						var loader = ATOMFILE;
+						loader.name = "in/"+filename;
+						loader.loadAtom();
+						control.attach( group_item );
+						scene.add( control );
+						scene.add(sphere_control);
+						orgin_ray_posx = control.position.x;
+						orgin_ray_posy = control.position.y;
+						 orgin_ray_posz = control.position.z;
+						 
+						 group_ray_posx = control.position.x;
+						 group_ray_posy = control.position.y;
+						 group_ray_posz = control.position.z;
+						 camera_active.zoom = 0.007;
+					//console.log(camera_active);
+					camera_active.updateProjectionMatrix();
+					//addFontToList();
+		}
+			function addFontToList()
+			{
+							var loaderff = new THREE.FontLoader();
+							loaderff.load( 'fonts/helvetiker_regular.typeface.json', function ( font ) {
+							for(var i=0;i<list_id.length;i++)
+							{
+							var indexF = list_id[i];
+							var textGeoo = new THREE.TextGeometry(indexF, {
+
+								font: font,
+
+								size: 0.5, height: 0.1, curveSegments: 3,
+
+								bevelThickness: 2,
+								bevelSize: 5,
+								bevelEnabled: false
+
+							} );
+
+							var textMaterial = new THREE.MeshPhongMaterial( { color: 0xffffff } );
+							var meshTemp = new THREE.Mesh( textGeoo, textMaterial );
+							var vec1 = new GFont(meshTemp,indexF);
+							list_fob.push(vec1);
+							//console.log(vec1);
+							//var geometrynew = new BufferGeometry().fromGeometry( geometry );
+							//meshText.geometry = meshTemp.geometry;
+						}
+							} );
+			}
+				
+					
+			///////////////////////////
+			// GUI
+				parameters = 
+				{
+					name: function() { resetSphere() },
+					cameraOrtho: "Ortho",
+					noe: function() { resetSphere() },
+					render: function() {
+						 takeScreenshot(); },
+					loadFile : function() { 
+					document.getElementById('myInput').click();
+					},
+					shape: "Sphere",
+					ID: "None",
+					shader: "None",
+					lightList: "None",
+					visible_lights : true,
+					new_light: function() { 
+						 addLight();
+					},
+					old_light: function() { 
+						 deleteLight();
+					},
+					render_type: "low",
+					texture: false,
+					axis:true,
+					metalness: 1.0,
+					roughness: 0.4,
+					x: 0, 
+					y: 30, 
+					z: 0,
+					scale: 0.25,
+					radius: 0.25,
+					color:  "#ff0000", // color (change "#" to "0x")
+					colorA: "#000000", // color (change "#" to "0x")
+					colorE: "#000033", // color (change "#" to "0x")
+					colorS: "#ffff00", // color (change "#" to "0x")
+					colorEnv: "#000000", // color (change "#" to "0x")
+					shininess: 30,
+					opacity: 1, 
+					outlinevisible: true,
+					material: "Phong",
+					metalness: 0.5,
+					roughness: 0.5,
+					envMapIntensity : 0.0,
+					lightIntensityP : 1.0,
+					lightIntensityH : 0.5,
+					mapReflection: 0.5,
+					mapRefraction: 0.5,
+					normalScale: 1.0,
+					envMapIntensity: 1.0,
+					hemilight: function() 
+					{on_off_hemi();},
+				};
+				
+			raycaster = new THREE.Raycaster();
+            camera_active.position.z = 10;
+            camera_active.lookAt(scene.position);
+			var orgin_rotation_camera = camera_active.rotation;
+			var orgin_rotation_scene = scene.rotation;
+			const orgin_group_position =  group_item.position;
+			const orgin_group_rotation =  group_item.rotation;
+			//addlistelemets();
+            animate();
+
+			function takeScreenshot() {
+
+				//wylaczenie swiatel w glownej grupie
+				offOnLight(false);
+				//wylaczenie wektorow XYZ
+				control.visible = false;
+
+				var w = window.open('', '');
+				w.document.title = "Screenshot";
+				//w.document.body.style.backgroundColor = "red";
+				var img = new Image();
+				// Without 'preserveDrawingBuffer' set to true, we must render now
+				renderer.render(scene, camera_active);
+				img.src = renderer.domElement.toDataURL();
+				w.document.body.appendChild(img);
+				
+				var rendererr = new THREE.WebGLRenderer();
+				rendererr.setSize( 0.1 *window.innerWidth- 2, 0.1 *window.innerHeight - 2);
+				rendererr.setClearColor(new THREE.Color(renderer.getClearColor()));
+				
+				var flag_l= false;
+				var list_ob = [];
+				//list_fob.push();
+				list_ob.push();
+				for(var i=0; i<ref_list.length;i++)
+				{
+					if(list_ob.length == 0)
+					{
+						list_ob.push(ref_list[i]);
+					}
+					else
+					{
+						for(var j=0; j<list_ob.length;j++)
+						{
+							if(list_ob[j].id == ref_list[i].id)
+							{
+							flag_l = true;
+							}
+							
+							if(ref_list[i].id == "Stick" || ref_list[i].name == "Stick")
+							{
+							flag_l = true;
+							}
+						}
+						if(false == flag_l)
+						{
+						list_ob.push(ref_list[i]);
+						}
+						flag_l=false;
+					}
+				}
+
+				for(var i=0; i<list_ob.length;i++)
+				{
+				//podmienianie parametrow obiektu sfery do legendy
+				sphere_exp.material = list_ob[i].object.material;
+				sphere_exp.geometry = list_ob[i].object.geometry;
+				for(var j=0; j<list_fob.length;j++)
+				{
+					if(list_fob[j].id == list_ob[i].id)
+					{
+						console.log("znalazlem");
+						meshText.geometry = list_fob[j].object.geometry;
+					}
+					console.log(list_fob[j]);
+				}
+				
+
+				var img = new Image();
+				// Without 'preserveDrawingBuffer' set to true, we must render now
+				
+				rendererr.render(scene, cameraa);
+				img.src = rendererr.domElement.toDataURL();
+				w.document.body.appendChild(img);
+				console.log(list_ob[i].id);
+
+				offOnLight(true);
+				//wylaczenie wektorow XYZ
+				control.visible = true;
+				}
+			}
+			function offOnLight(value)
+			{
+				for(var  i = 0 ;i<group_Light.children.length;i++)
+				{ 
+				var next = group_Light.children[i];
+				for(var  j = 0 ;j<next.children.length;j++)
+					{ 		
+						if(next.children[j].type =="Mesh")
+						{		
+						next.children[j].visible = value;
+						}
+					}
+					parameters['visible_lights'] = value;
+				}
+			}
+			function onDocumentMouseDown( event ) 
+			{
+				  flag_click = true;
+			}
+			function ray_cast()
+			{
+			// find intersections
+			raycaster.setFromCamera( mouse, camera_active );
+			if(false == flagRayCastAtom)
+				{
+					var intersects = raycaster.intersectObjects( onOffCubes , true );
+					if ( intersects.length > 0 ) {
+						if ( INTERSECTED != intersects[ 0 ].object.parent ) {
+							INTERSECTED = intersects[ 0 ].object;
+							INTERSECTED.currentHex = INTERSECTED.material.emissive.getHex();
+							INTERSECTED.material.emissive.setHex( 0xff0000 );
+							//console.log(INTERSECTED.parent);
+							if(control.attach(INTERSECTED.parent)!=null )
+							{
+								//console.log("Click.3");
+								control.attach(INTERSECTED.parent);
+							}
+							//console.log(INTERSECTED);
+							//console.log(INTERSECTED.parent );
+							control.position.copy( INTERSECTED.position );
+							activ_light =  INTERSECTED;							
+							//console.log(lightList.domElement);
+							//console.log(lightList.domElement.children[0]);
+							lightList.domElement.children[0].selectedIndex = 1;
+							lightList.domElement.children[0].selectedOptions = 1;
+							lightList.domElement.children[0].value = activ_light.parent.uuid
+							// console.log(lightList.domElement.children[0].selectedOptions);
+							// console.log(lightList.domElement.children[0]);
+							// lightList.domElement.children[0].value = activ_light.parent.uuid;
+							// lightList.domElement.children[0].selectedOptions.value = activ_light.parent.uuid;
+							// lightList.domElement.children[0].selectedOptions.selected = activ_light.parent.uuid;
+							// lightList.domElement.children[0].selectedOptions.text = activ_light.parent.uuid;
+							// lightList.domElement.children[0].selectedIndex = 1;
+							// //lightList.domElement.children[0].selectedOptions = 1;
+							// lightList.domElement.children[0].selectedOptions[0].textContent = activ_light.parent.uuid;
+							// console.log(lightList.domElement.children[0].selectedOptions);
+							// console.log(lightList.domElement.children[0]);
+						}
+					} else {
+						if ( INTERSECTED ) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+						INTERSECTED = null;
+					}
+				}
+				if(true == flagRayCastAtom)
+				{
+						//console.log("Click.1");
+						//console.log(onOffChangeLoc);
+						var intersectss = raycaster.intersectObjects( onOffChangeLoc, true );
+					if ( intersectss.length > 0 ) {
+						console.log(intersectss);
+						//console.log("Click.2");
+						if ( INTERSECTED != intersectss[ 0 ].object.parent ) {
+						console.log(INTERSECTED);
+							INTERSECTED = intersectss[ 0 ].object;
+							if(control.attach(INTERSECTED.parent)!=null )
+							{
+								control.attach(INTERSECTED.parent);
+							}
+							group_ray_posx = INTERSECTED.position.x;
+							group_ray_posy = INTERSECTED.position.y;
+							group_ray_posz = INTERSECTED.position.z;
+							control.position.copy( INTERSECTED.position );
+							//activ_light =  INTERSECTED;
+							//console.log(activ_light);
+						}
+					} else {
+						if ( INTERSECTED ) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+						INTERSECTED = null;
+					}
+				}
+			}
+            function renderScene(){
+							var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+				cameraa.aspect = 0.5 * SCREEN_WIDTH / SCREEN_HEIGHT;
+				//camera_active.aspect = 0.5 * SCREEN_WIDTH / SCREEN_HEIGHT;
+				cameraa.updateProjectionMatrix();
+				camera_active.updateProjectionMatrix();
+				
+				// if ( camera_active == camera_percpective ) {
+				// 	//cameraPerspective.fov = 35 + 30 * Math.sin( 0.5 * r );
+				// 	//.far = mesh.position.length();
+				// 	camera_percpective.updateProjectionMatrix();
+				// 	//cameraPerspectiveHelper.update();
+				// 	//cameraPerspectiveHelper.visible = true;
+				// 	//cameraOrthoHelper.visible = false;
+				// } else {
+				// 	//cameraOrtho.far = mesh.position.length();
+				// 	camera_ortho.updateProjectionMatrix();
+				// 	//cameraOrthoHelper.update();
+				// 	//cameraOrthoHelper.visible = true;
+				// }
+				// setViewport parameters:
+				//  lower_left_x, lower_left_y, viewport_width, viewport_height
+
+				renderer.setViewport( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT );
+				renderer.clear();
+			
+				
+				// right side
+				renderer.setViewport( 1, 1,   1 * SCREEN_WIDTH - 2, SCREEN_HEIGHT - 2 );
+				renderer.render( scene, camera_active );
+				
+				cameraa.lookAt(sphere_exp.position);
+				cameraa.zoom = 0.1;
+            }
+            function renderScene_M(){
+			reload_active_elements();
+
+            }
+			function animate() {
+
+	
+		
+		
+		// uncomment the following two lines to see the effect of the code
+
+                requestAnimationFrame( animate );
+				//Orbit.update();
+				//Orbitp.update();
+				ray_cast();
+				groupLight1.rotation.x += 0.01;
+				groupLight1.rotation.y += 0.01;
+				groupLight2.rotation.x -= 0.02;
+				groupLight2.rotation.y -= 0.02;
+				group.rotation.z += 0.1;
+				renderScene();
+				renderScene_M();
+				//control.update();
+				//control_light.update();
+			};
+			function updateRenderType(value)
+			{
+						control.attach( group_item );
+						control.position.copy( group_item.position );
+						
+						if(flag_open == true)
+						{
+							flag_outline = false;
+						}
+						else
+						{
+							flag_open = true;
+						}
+						
+						if(value == "low")
+						{
+							console.log("Low");
+							reload_scene();
+							control.position.set(group_ray_posx,group_ray_posy,group_ray_posz);
+					control.attach( group_item );
+						}
+						else
+						{
+							console.log("Hight");
+							reload_scene();
+							control.position.set(group_ray_posx,group_ray_posy,group_ray_posz);
+					control.attach( group_item );
+						}
+						//updateShadertype();
+
+
+			}
+			function onDocumentMouseMove( event ) {
+				event.preventDefault();
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+			}
+			function viewScreen(key)
+			{
+			if (key == 1) {
+				camera_active.position.x = orgin_ray_posx ;
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz +20.0;
+				camera_active.lookAt(scene.position);
+                } 
+                else if (key == 2) {
+				camera_active.position.x = orgin_ray_posx ;
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = -(orgin_ray_posz +20.0);
+				camera_active.lookAt(scene.position);
+                } 
+				 else if (key == 3) {
+				camera_active.position.x = -(orgin_ray_posx +20.0);
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }  
+				else if (key == 4) {
+				camera_active.position.x = (orgin_ray_posx +20.0);
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+				else if (key == 5) {
+				camera_active.position.x = orgin_ray_posx;
+				camera_active.position.y = -(orgin_ray_posy +20.0);
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+				else if (key == 6) {
+				camera_active.position.x = orgin_ray_posx;
+				camera_active.position.y = (orgin_ray_posy +20.0);
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+			}
+			function onDocumentKeyDown(event) {
+                var key = event.which;
+				console.log( String.fromCharCode(key));
+                if (key == '1'.charCodeAt(0)) {
+				camera_active.position.x = orgin_ray_posx ;
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz +20.0;
+				camera_active.lookAt(scene.position);
+                } 
+                else if (key == '2'.charCodeAt(0)) {
+				camera_active.position.x = orgin_ray_posx ;
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = -(orgin_ray_posz +20.0);
+				camera_active.lookAt(scene.position);
+                } 
+				 else if (key == '3'.charCodeAt(0)) {
+				camera_active.position.x = -(orgin_ray_posx +20.0);
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }  
+				else if (key == '4'.charCodeAt(0)) {
+				camera_active.position.x = (orgin_ray_posx +20.0);
+				camera_active.position.y = orgin_ray_posy ;
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+				else if (key == '5'.charCodeAt(0)) {
+				camera_active.position.x = orgin_ray_posx;
+				camera_active.position.y = -(orgin_ray_posy +20.0);
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+				else if (key == '6'.charCodeAt(0)) {
+				camera_active.position.x = orgin_ray_posx;
+				camera_active.position.y = (orgin_ray_posy +20.0);
+				camera_active.position.z = orgin_ray_posz;
+				camera_active.lookAt(scene.position);
+                }
+				else if (key == '0'.charCodeAt(0) || key == '0'.charCodeAt(0)) {
+				
+					control.position.set(group_ray_posx,group_ray_posy,group_ray_posz);
+					control.attach( group_item );
+				}
+				else if (key == 'c'.charCodeAt(0) || key == 'C'.charCodeAt(0)) {
+						console.log("c");
+						flagRayCastAtom = true;
+						onOffChangeLoc = [];
+						for(var  j = 0 ;j<group_item.children.length;j++){ 
+							for(var  i = 0 ;i<group_item.children.length;i++){ 
+									var next = group_item.children[i];
+
+										if(!(next.geometry.name == stick_activ_group_1+stick_activ_group_2 || 
+										   next.geometry.name == stick_activ_group_2+stick_activ_group_1))
+										{
+											onOffChangeLoc.push(next);
+										}
+								}
+						}
+						control.attach( group_item );
+						//console.log(onOffCubes);
+				}
+				else if (key == 's'.charCodeAt(0) || key == 'S'.charCodeAt(0)) {
+						console.log("s");
+						flagRayCastAtom = false;
+					control.attach( group_item );
+				}
+				else if (key == 'w'.charCodeAt(0) || key == 'W'.charCodeAt(0))
+				{
+							control.setMode( "translate" );
+				}
+				else if (key == 'e'.charCodeAt(0) || key == 'E'.charCodeAt(0))
+				{
+							control.setMode( "rotate" );
+				}
+
+            };
+			
+		function save_examle()
+		{
+			//to jest z json'a na object
+			//JSON.parse('{ "name":"John", "age":30, "city":"New York"}'); 
+			
+			
+			const b64toBlob = (b64Data, contentType='', sliceSize=512) => {
+  const byteCharacters = atob(b64Data);
+  const byteArrays = [];
+
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+    
+  const blob = new Blob(byteArrays, {type: contentType});
+  return blob;
+}
+
+			const contentType = 'text/plain';
+			const b64Data = "MTEyDQpHcmFwaGVuZQ0KIEMgICAgMC4wMDAwMDAgICAgMC4wMDAwMDAgICAgMC4wMDAwMDANCiBDICAgIDAuMDAwMDAwICAgIDAuMDAwMDAwICAgIDYuNzgwMDAwDQogQyAgIC0xLjIzMDUwMCAgICAyLjEzMTI4OSAgICAwLjAwMDAwMA0KIEMgICAtMS4yMzA1MDAgICAgMi4xMzEyODkgICAgNi43ODAwMDANCiBDICAgLTIuNDYxMDAwICAgIDQuMjYyNTc3ICAgIDAuMDAwMDAwDQogQyAgIC0yLjQ2MTAwMCAgICA0LjI2MjU3NyAgICA2Ljc4MDAwMA0KIEMgICAgMi40NjEwMDAgICAgMC4wMDAwMDAgICAgMC4wMDAwMDANCiBDICAgIDIuNDYxMDAwICAgIDAuMDAwMDAwICAgIDYuNzgwMDAwDQogQyAgICAxLjIzMDUwMCAgICAyLjEzMTI4OSAgICAwLjAwMDAwMA0KIEMgICAgMS4yMzA1MDAgICAgMi4xMzEyODkgICAgNi43ODAwMDANCiBDICAgIDAuMDAwMDAwICAgIDQuMjYyNTc3ICAgIDAuMDAwMDAwDQogQyAgICAwLjAwMDAwMCAgICA0LjI2MjU3NyAgICA2Ljc4MDAwMA0KIEMgICAgNC45MjIwMDAgICAgMC4wMDAwMDAgICAgMC4wMDAwMDANCiBDICAgIDQuOTIyMDAwICAgIDAuMDAwMDAwICAgIDYuNzgwMDAwDQogQyAgICAzLjY5MTUwMCAgICAyLjEzMTI4OSAgICAwLjAwMDAwMA0KIEMgICAgMy42OTE1MDAgICAgMi4xMzEyODkgICAgNi43ODAwMDANCiBDICAgIDIuNDYxMDAwICAgIDQuMjYyNTc3ICAgIDAuMDAwMDAwDQogQyAgICAyLjQ2MTAwMCAgICA0LjI2MjU3NyAgICA2Ljc4MDAwMA0KIEMgICAgMC4wMDAwMDAgICAgMC4wMDAwMDAgICAgMy4zOTAwMDANCiBDICAgIDAuMDAwMDAwICAgIDAuMDAwMDAwICAgMTAuMTcwMDAwDQogQyAgIC0xLjIzMDUwMCAgICAyLjEzMTI4OSAgICAzLjM5MDAwMA0KIEMgICAtMS4yMzA1MDAgICAgMi4xMzEyODkgICAxMC4xNzAwMDANCiBDICAgLTIuNDYxMDAwICAgIDQuMjYyNTc3ICAgIDMuMzkwMDAwDQogQyAgIC0yLjQ2MTAwMCAgICA0LjI2MjU3NyAgIDEwLjE3MDAwMA0KIEMgICAgMi40NjEwMDAgICAgMC4wMDAwMDAgICAgMy4zOTAwMDANCiBDICAgIDIuNDYxMDAwICAgIDAuMDAwMDAwICAgMTAuMTcwMDAwDQogQyAgICAxLjIzMDUwMCAgICAyLjEzMTI4OSAgICAzLjM5MDAwMA0KIEMgICAgMS4yMzA1MDAgICAgMi4xMzEyODkgICAxMC4xNzAwMDANCiBDICAgIDAuMDAwMDAwICAgIDQuMjYyNTc3ICAgIDMuMzkwMDAwDQogQyAgICAwLjAwMDAwMCAgICA0LjI2MjU3NyAgIDEwLjE3MDAwMA0KIEMgICAgNC45MjIwMDAgICAgMC4wMDAwMDAgICAgMy4zOTAwMDANCiBDICAgIDQuOTIyMDAwICAgIDAuMDAwMDAwICAgMTAuMTcwMDAwDQogQyAgICAzLjY5MTUwMCAgICAyLjEzMTI4OSAgICAzLjM5MDAwMA0KIEMgICAgMy42OTE1MDAgICAgMi4xMzEyODkgICAxMC4xNzAwMDANCiBDICAgIDIuNDYxMDAwICAgIDQuMjYyNTc3ICAgIDMuMzkwMDAwDQogQyAgICAyLjQ2MTAwMCAgICA0LjI2MjU3NyAgIDEwLjE3MDAwMA0KIEMgICAtMC4wMDAwMDEgICAgMS40MjA4NjAgICAgMC4wMzM5MDANCiBDICAgLTAuMDAwMDAxICAgIDEuNDIwODYwICAgIDYuODEzOTAwDQogQyAgIC0xLjIzMDUwMSAgICAzLjU1MjE0OCAgICAwLjAzMzkwMA0KIEMgICAtMS4yMzA1MDEgICAgMy41NTIxNDggICAgNi44MTM5MDANCiBDICAgLTIuNDYxMDAxICAgIDUuNjgzNDM3ICAgIDAuMDMzOTAwDQogQyAgIC0yLjQ2MTAwMSAgICA1LjY4MzQzNyAgICA2LjgxMzkwMA0KIEMgICAgMi40NjA5OTkgICAgMS40MjA4NjAgICAgMC4wMzM5MDANCiBDICAgIDIuNDYwOTk5ICAgIDEuNDIwODYwICAgIDYuODEzOTAwDQogQyAgICAxLjIzMDQ5OSAgICAzLjU1MjE0OCAgICAwLjAzMzkwMA0KIEMgICAgMS4yMzA0OTkgICAgMy41NTIxNDggICAgNi44MTM5MDANCiBDICAgLTAuMDAwMDAxICAgIDUuNjgzNDM3ICAgIDAuMDMzOTAwDQogQyAgIC0wLjAwMDAwMSAgICA1LjY4MzQzNyAgICA2LjgxMzkwMA0KIEMgICAgNC45MjE5OTkgICAgMS40MjA4NjAgICAgMC4wMzM5MDANCiBDICAgIDQuOTIxOTk5ICAgIDEuNDIwODYwICAgIDYuODEzOTAwDQogQyAgICAzLjY5MTQ5OSAgICAzLjU1MjE0OCAgICAwLjAzMzkwMA0KIEMgICAgMy42OTE0OTkgICAgMy41NTIxNDggICAgNi44MTM5MDANCiBDICAgIDIuNDYwOTk5ICAgIDUuNjgzNDM3ICAgIDAuMDMzOTAwDQogQyAgICAyLjQ2MDk5OSAgICA1LjY4MzQzNyAgICA2LjgxMzkwMA0KIEMgICAgMS4yMzA1MDEgICAgMC43MTA0MjkgICAgMy40MjM5MDANCiBDICAgIDEuMjMwNTAxICAgIDAuNzEwNDI5ICAgMTAuMjAzOTAwDQogQyAgICAwLjAwMDAwMSAgICAyLjg0MTcxNyAgICAzLjQyMzkwMA0KIEMgICAgMC4wMDAwMDEgICAgMi44NDE3MTcgICAxMC4yMDM5MDANCiBDICAgLTEuMjMwNDk5ICAgIDQuOTczMDA2ICAgIDMuNDIzOTAwDQogQyAgIC0xLjIzMDQ5OSAgICA0Ljk3MzAwNiAgIDEwLjIwMzkwMA0KIEMgICAgMy42OTE1MDEgICAgMC43MTA0MjkgICAgMy40MjM5MDANCiBDICAgIDMuNjkxNTAxICAgIDAuNzEwNDI5ICAgMTAuMjAzOTAwDQogQyAgICAyLjQ2MTAwMSAgICAyLjg0MTcxNyAgICAzLjQyMzkwMA0KIEMgICAgMi40NjEwMDEgICAgMi44NDE3MTcgICAxMC4yMDM5MDANCiBDICAgIDEuMjMwNTAxICAgIDQuOTczMDA2ICAgIDMuNDIzOTAwDQogQyAgICAxLjIzMDUwMSAgICA0Ljk3MzAwNiAgIDEwLjIwMzkwMA0KIEMgICAgNi4xNTI1MDEgICAgMC43MTA0MjkgICAgMy40MjM5MDANCiBDICAgIDYuMTUyNTAxICAgIDAuNzEwNDI5ICAgMTAuMjAzOTAwDQogQyAgICA0LjkyMjAwMSAgICAyLjg0MTcxNyAgICAzLjQyMzkwMA0KIEMgICAgNC45MjIwMDEgICAgMi44NDE3MTcgICAxMC4yMDM5MDANCiBDICAgIDMuNjkxNTAxICAgIDQuOTczMDA2ICAgIDMuNDIzOTAwDQogQyAgICAzLjY5MTUwMSAgICA0Ljk3MzAwNiAgIDEwLjIwMzkwMA0KIEMgICAtMS4yMzA1MDEgICAtMC43MTA0MjkgICAgMC4wMzM5MDANCiBDICAgIDEuMjMwNDk5ICAgLTAuNzEwNDI5ICAgIDAuMDMzOTAwDQogQyAgIC0xLjIzMDUwMSAgIC0wLjcxMDQyOSAgICA2LjgxMzkwMA0KIEMgICAgMS4yMzA0OTkgICAtMC43MTA0MjkgICAgNi44MTM5MDANCiBDICAgLTIuNDYxMDAxICAgIDEuNDIwODYwICAgIDAuMDMzOTAwDQogQyAgIC0yLjQ2MTAwMSAgICAxLjQyMDg2MCAgICA2LjgxMzkwMA0KIEMgICAtMy42OTE1MDEgICAgMy41NTIxNDggICAgMC4wMzM5MDANCiBDICAgLTMuNjkxNTAxICAgIDMuNTUyMTQ4ICAgIDYuODEzOTAwDQogQyAgICAzLjY5MTQ5OSAgIC0wLjcxMDQyOSAgICAwLjAzMzkwMA0KIEMgICAgMy42OTE0OTkgICAtMC43MTA0MjkgICAgNi44MTM5MDANCiBDICAgIDYuMTUyNDk5ICAgLTAuNzEwNDI5ICAgIDAuMDMzOTAwDQogQyAgICA2LjE1MjQ5OSAgIC0wLjcxMDQyOSAgICA2LjgxMzkwMA0KIEMgICAgMC4wMDAwMDEgICAtMS40MjA4NjAgICAgMy40MjM5MDANCiBDICAgLTEuMjMwNDk5ICAgIDAuNzEwNDI5ICAgIDMuNDIzOTAwDQogQyAgICAwLjAwMDAwMSAgIC0xLjQyMDg2MCAgIDEwLjIwMzkwMA0KIEMgICAtMS4yMzA0OTkgICAgMC43MTA0MjkgICAxMC4yMDM5MDANCiBDICAgLTIuNDYwOTk5ICAgIDIuODQxNzE3ICAgIDMuNDIzOTAwDQogQyAgIC0yLjQ2MDk5OSAgICAyLjg0MTcxNyAgIDEwLjIwMzkwMA0KIEMgICAtMy42OTE0OTkgICAgNC45NzMwMDYgICAgMy40MjM5MDANCiBDICAgLTMuNjkxNDk5ICAgIDQuOTczMDA2ICAgMTAuMjAzOTAwDQogQyAgICAyLjQ2MTAwMSAgIC0xLjQyMDg2MCAgICAzLjQyMzkwMA0KIEMgICAgMi40NjEwMDEgICAtMS40MjA4NjAgICAxMC4yMDM5MDANCiBDICAgIDQuOTIyMDAxICAgLTEuNDIwODYwICAgIDMuNDIzOTAwDQogQyAgICA0LjkyMjAwMSAgIC0xLjQyMDg2MCAgIDEwLjIwMzkwMA0KQmkgICAgMC4wMTAwMDAgICAgMy45Njk5NzkgICAxNi43ODAwMDENCkJpICAgIDQuOTI5MDAwICAgIDMuOTY5OTc5ICAgMTYuNzgwMDAxDQpCaSAgICAyLjMyOTUwMSAgICAxLjg2MDAwMSAgIDE2LjgxMDAwMQ0KQmkgICAgMi4zMjk1MDEgICAgNi4xMjAwMDIgICAxNi44MTAwMDENCkJpICAgIDcuMjQ4NTAxICAgIDEuODYwMDAxICAgMTYuODEwMDAxDQpCaSAgICA3LjI0ODUwMSAgICA2LjEyMDAwMiAgIDE2LjgxMDAwMQ0KQmkgICAgMC4zNjAwMDIgICAgNC4wNTk5OTMgICAxMy41NjAwMDANCkJpICAgIDUuMjc5MDAyICAgIDQuMDU5OTkzICAgMTMuNTYwMDAwDQpCaSAgICAyLjM5OTQ5OCAgICAxLjg3MDAxMiAgIDEzLjk0MDAwMQ0KQmkgICAgMi4zOTk0OTggICAgNi4xMzAwMTMgICAxMy45NDAwMDENCkJpICAgIDcuMzE4NDk4ICAgIDEuODcwMDEyICAgMTMuOTQwMDAxDQpCaSAgICA3LjMxODQ5OCAgICA2LjEzMDAxMyAgIDEzLjk0MDAwMQ0KQmkgICAgMC4zNjAwMDIgICAtMC4yMDAwMDcgICAxMy41NjAwMDANCkJpICAgIDAuMzYwMDAyICAgIDguMzE5OTk0ICAgMTMuNTYwMDAwDQpCaSAgICA1LjI3OTAwMiAgIC0wLjIwMDAwNyAgIDEzLjU2MDAwMA0KQmkgICAgNS4yNzkwMDIgICAgOC4zMTk5OTQgICAxMy41NjAwMDANCg==";
+					
+								const blob = b64toBlob(b64Data, contentType);
+				invokeSaveAsDialog(blob, 'Grafene.xyz');
+		}
+
+ 
+		</script>
+	</body>
+</html>
