@@ -1,3 +1,4 @@
+![atomic](https://user-images.githubusercontent.com/44551565/132960480-6836a86a-a652-489d-a7e2-ab6fe6d8783a.png)
 # AtomicJS
 http://std2.phys.uni.lodz.pl/piotrzielinski/Atomic_js/index.html
 
